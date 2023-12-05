@@ -1,0 +1,129 @@
+---
+title: "Assignment"
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+# Install DeSeq2
+
+#BiocManager::install("DESeq2")
+#BiocManager::install("clusterProfiler")
+
+library(clusterProfiler)
+library(DESeq2)
+
+current_wd = getwd()
+filename_dataset = paste(current_wd, "brca_tcga_pan_can_atlas_2018.tar.gz", sep = "/")
+
+#untar(filename_dataset)
+setwd("brca_tcga_pan_can_atlas_2018")
+
+# Read the RNASeq file: data_mrna_seq_v2_rsem.txt
+data_Rnaseq = read.delim("data_mrna_seq_v2_rsem.txt")
+
+#colnames(data_Rnaseq)
+
+# Read the Patient Data file: data_clinical_patient.txt
+
+data_patient = read.delim("data_clinical_patient.txt")
+
+#col_age = which(colnames(data_patient) =="Diagnosis.Age")
+
+# Read the Copy Number Aberrations Data: data_cna.txt
+data_cna = read.delim("data_cna.txt")
+
+
+# Match the RNASeq patient ids with the CNA ids and the Patient Data ids.
+map_func <- function(value){
+  paste(gsub("-", ".", value),".01", sep = "")
+}
+
+tmp <- lapply(data_patient$X.Patient.Identifier, map_func)
+data_patient$X.Patient.Identifier <- tmp
+
+# Create metadata using the CNA level of ERBB2+ (greater than 0 means amplified).
+
+assay = as.matrix(data_Rnaseq[,-c(1,2)])
+metadata = matrix(0, dim(assay)[2],1)
+
+colnames(data_patient)[1]
+
+pat_ids = data_patient[5:nrow(data_patient),1]
+row_erbb2 = which(data_cna[,1] == "ERBB2")
+
+#for (i in 1:dim(assay)[2]){
+for (i in 1:(ncol(data_cna)-2)){
+  pat_barcode = colnames(assay)[i]
+#  pat_barcode = substr(pat_barcode, 1, 12)
+#  pat_barcode = gsub("\\.", "-",pat_barcode)
+  idx = which(pat_barcode == pat_ids)
+  metadata[i,1] = 1*(as.numeric(data_cna[row_erbb2, idx])>0)
+}
+metadata[is.na(metadata)] =0
+colnames(metadata) = "ERBB2"
+
+# Build DESeq Object
+
+assay[is.na(assay)] = 0  # Impute with zeros the NA
+assay[assay<0] = 0
+
+dds <- DESeqDataSetFromMatrix(countData = round(assay),
+                              colData = metadata,
+                              design = ~ ERBB2)
+
+# Filter
+
+smallestGroupSize <- 3
+keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize
+dds <- dds[keep,]
+
+# Normalize
+
+dds <- DESeq(dds)
+
+res <- results(dds)
+plotCounts(dds, which.min(res$pvalue))
+# Summary
+
+summary(res)
+rownames(res) = data_Rnaseq[keep,1]
+head(res[order(res$pvalue),])
+
+# Significantly Differentially Expressed
+
+signif = which(res$padj<0.05)
+deg = res[signif,]
+
+
+
+# Separate them 
+dup = deg[deg[,2]>0.,]
+
+ddown = deg[deg[,2]<0.,]
+
+# For Pathway Enrichment we need Entrez IDs
+entrez_all = data_Rnaseq[keep[signif],2]
+entrez_up = data_Rnaseq[keep[signif[deg[,2]>0.]],2]
+entrez_down = data_Rnaseq[keep[signif[deg[,2]<0.]],2]
+# Do a KEGG pathway over-representation analysis
+
+all_paths =   enrichKEGG(gene = entrez_all, organism = 'hsa', pvalueCutoff = 0.05)
+head(all_paths)
+
+# Transform the data to visualize
+rld <- vst(dds, blind=FALSE)
+
+# Do Principal Components Analysis
+pc = prcomp(assay(rld))
+
+# Plot 
+#plot(pc$rotation[,1], pc$rotation[,2], col = 1+(metadata), pch = 19)
+plotPCA(rld, intgroup = "ERBB2")
+
+```
