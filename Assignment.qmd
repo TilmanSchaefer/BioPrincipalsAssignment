@@ -1,12 +1,16 @@
 ---
 title: "Assignment"
+author: "Tilman Schaefer 23206466"
+format: pdf
+editor: visual
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
 
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
 if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 
@@ -17,6 +21,7 @@ if (!require("BiocManager", quietly = TRUE))
 
 library(clusterProfiler)
 library(DESeq2)
+library(vidger)
 
 current_wd = getwd()
 filename_dataset = paste(current_wd, "brca_tcga_pan_can_atlas_2018.tar.gz", sep = "/")
@@ -54,16 +59,24 @@ metadata = matrix(0, dim(assay)[2],1)
 
 colnames(data_patient)[1]
 
-pat_ids = data_patient[5:nrow(data_patient),1]
+#patient_ids = data_patient[5:nrow(data_patient),1]
+patient_ids = as.list(colnames(data_cna)[3:ncol(data_cna)])
+
 row_erbb2 = which(data_cna[,1] == "ERBB2")
 
-#for (i in 1:dim(assay)[2]){
-for (i in 1:(ncol(data_cna)-2)){
-  pat_barcode = colnames(assay)[i]
-#  pat_barcode = substr(pat_barcode, 1, 12)
-#  pat_barcode = gsub("\\.", "-",pat_barcode)
-  idx = which(pat_barcode == pat_ids)
-  metadata[i,1] = 1*(as.numeric(data_cna[row_erbb2, idx])>0)
+# Populate metadata with patient IDs
+# NB: there seems to be a discrepancy between the number of entries for the
+# patient data in the different data files. data_cna has 1070 entries whereas
+# data_Rnaseq has 1082.
+
+for (i in 1:dim(assay)[2]){
+  patient_barcode = colnames(assay)[i]
+  idx = which(patient_barcode == patient_ids)
+  # For some patients there is no entry in the CNA table so
+  # we check for idx to be valid
+  if(!identical(idx, integer(0))) {
+    metadata[i,1] = 1*(as.numeric(data_cna[row_erbb2, idx + 2 ])>0)
+  }
 }
 metadata[is.na(metadata)] =0
 colnames(metadata) = "ERBB2"
@@ -88,7 +101,7 @@ dds <- dds[keep,]
 dds <- DESeq(dds)
 
 res <- results(dds)
-plotCounts(dds, which.min(res$pvalue))
+plotCounts(dds, which.min(res$pvalue), intgroup ="ERBB2", returnData=TRUE )
 # Summary
 
 summary(res)
@@ -114,7 +127,7 @@ entrez_down = data_Rnaseq[keep[signif[deg[,2]<0.]],2]
 # Do a KEGG pathway over-representation analysis
 
 all_paths =   enrichKEGG(gene = entrez_all, organism = 'hsa', pvalueCutoff = 0.05)
-head(all_paths)
+#head(all_paths)
 
 # Transform the data to visualize
 rld <- vst(dds, blind=FALSE)
@@ -124,6 +137,115 @@ pc = prcomp(assay(rld))
 
 # Plot 
 #plot(pc$rotation[,1], pc$rotation[,2], col = 1+(metadata), pch = 19)
-plotPCA(rld, intgroup = "ERBB2")
+#plotPCA(rld, intgroup = "ERBB2")
 
 ```
+
+
+## Background
+
+According to the International Agency for Resarch on Cancer, breast cancer is the most common cancer overall, accounting for about 12% of all cancer cases. In approx. 20% of invasive breast cancers the ERBB2 oncogene is overexpressed, which has also been linked to the promotion of breast cancer invasion and metastasis, resulting in poor patient survival (https://www.intechopen.com/chapters/53690).
+
+While the overexpression of ERBB2 has been established as a reliable biomarker for the diagnosis, treatment and prognosis of breast cancer, many of the underlying processes such as tumor progression and resistance to treatment are still not well understood. It is therefore important to understand the factors that contribute to therapy resistance of ErbB2-positive breast cancer tumors and to identify other genetic or transcriptomic factors in order to identify novel therapeutic strategies to overcome resistance.
+
+In this study I am going to investigate whether and what other genes are overexpressed in patients with ERBB2+ breast cancer. This could
+provide insights into other contributing factors that promote/supress tumor progression or enhance/inhibit therapy resistance, ultimately leading to a better understanging and the development of alternative therapy targets.
+
+
+
+## Methods
+
+For this investigation I performed a differential gene expression analysis of patients with BRCA, using the DESeq2 R-package from BiocManager. The patient data was obtained from ... and contains a dataset with about 1080 observations. For the analysis I divided the patients into two groups, one group with an amplified level of ERBB2 (CNA level > 0) and the other one with an expression level <= 0. 
+A KEGG Enrichment Analysis was subsequently performed using the clusterProfiler library from BiocManager. Lastly, I performed a Principal Component Analysis.
+
+## Results
+
+
+### Data preparation
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+library(ggplot2)
+library(knitr)
+
+counts = plotCounts(dds, which.min(res$pvalue), "ERBB2", returnData=TRUE)
+
+# counts_0 = data.frame(cnt = counts$count[counts$ERBB2 == 0])
+# counts_1 = data.frame(cnt = counts$count[counts$ERBB2 == 1])
+# 
+mean0 = mean(counts$count[counts$ERBB2 == 0])
+mean1 = mean(counts$count[counts$ERBB2 == 1])
+count_means = data.frame(mean= c(mean0, mean1), ERBB2 = c(0,1))
+# ggplot() +
+#   geom_freqpoly(mapping = aes(x = cnt) , data = counts_0, binwidth = 100) +
+#   geom_freqpoly(mapping = aes(x = cnt) , data = counts_1, binwidth = 100, color = "red") +
+#    xlim(0, 10000)
+# 
+# ggplot() +
+#   geom_dotplot(mapping = aes(x = cnt) , data = counts_0)
+# 
+ggplot(counts,  aes(x=as.factor(ERBB2), y = count)) +
+   geom_point() +
+   geom_point(
+    mapping = aes(y = mean), data = count_means,
+    colour = 'red', size = 3
+  ) + 
+  ylim(0,100000) +
+  xlab("ERBB2 amplified")
+
+
+```
+
+Table @tab-top10-results shows the result of the DGE analysis by listing the
+top 10 genes with the highest deviation of the log2 fold change value.
+
+
+``` {r}
+#| echo: false
+#| warning: false
+#| message: false
+#| label: tab-top10-results
+#| tab-cap: Top 10 differentiated genes
+
+kable(head(res[order(res$log2FoldChange),], n = 10),
+           caption = "Top 10 differentiated genes")
+```
+
+
+``` {r}
+#| echo: false
+#| warning: false
+#| message: false
+#| label: tab-top5-paths
+#| tab-cap: Top 5 paths
+
+kegg_top5 = head(all_paths, n = 5)
+kegg_top5$geneID = NULL
+kegg_top5$BgRatio = NULL
+kegg_top5$ID = NULL
+kegg_top5$qvalue = NULL
+
+kable(head(kegg_top5, n = 10),
+           caption = "Top 10 paths")
+```
+
+### PCA
+
+``` {r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+plotPCA(rld, intgroup = "ERBB2")
+#plot(pc$rotation[,2], pc$rotation[,1], col = 1+(metadata), pch = 19)
+
+```
+
+
+
+
