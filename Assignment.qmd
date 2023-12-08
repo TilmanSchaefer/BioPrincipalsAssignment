@@ -1,10 +1,9 @@
 ---
-title: "Assignment"
+title: "Assignment (DRAFT)"
 author: "Tilman Schaefer 23206466"
 format: pdf
 editor: visual
 ---
-
 
 ```{r}
 #| echo: false
@@ -32,13 +31,10 @@ setwd("brca_tcga_pan_can_atlas_2018")
 # Read the RNASeq file: data_mrna_seq_v2_rsem.txt
 data_Rnaseq = read.delim("data_mrna_seq_v2_rsem.txt")
 
-#colnames(data_Rnaseq)
 
 # Read the Patient Data file: data_clinical_patient.txt
 
 data_patient = read.delim("data_clinical_patient.txt")
-
-#col_age = which(colnames(data_patient) =="Diagnosis.Age")
 
 # Read the Copy Number Aberrations Data: data_cna.txt
 data_cna = read.delim("data_cna.txt")
@@ -57,11 +53,10 @@ data_patient$X.Patient.Identifier <- tmp
 assay = as.matrix(data_Rnaseq[,-c(1,2)])
 metadata = matrix(0, dim(assay)[2],1)
 
-colnames(data_patient)[1]
 
-#patient_ids = data_patient[5:nrow(data_patient),1]
 patient_ids = as.list(colnames(data_cna)[3:ncol(data_cna)])
 
+# Find the row in the CNA file that contains the ERBB2 gene
 row_erbb2 = which(data_cna[,1] == "ERBB2")
 
 # Populate metadata with patient IDs
@@ -101,24 +96,43 @@ dds <- dds[keep,]
 dds <- DESeq(dds)
 
 res <- results(dds)
-plotCounts(dds, which.min(res$pvalue), intgroup ="ERBB2", returnData=TRUE )
-# Summary
 
-summary(res)
+
+
+# Summary
+#summary(res)
 rownames(res) = data_Rnaseq[keep,1]
-head(res[order(res$pvalue),])
+
+# Obtain the top 10 differentially expressed genes based of log2fold change
+# Since the log2fold change can be positive or negative I used the absolute
+# value to sort them
+dseq_result = as.data.frame(res)
+res_filtered <- dseq_result %>% filter(abs(dseq_result$log2FoldChange)>1)
+top_pos_log2fold = head(res_filtered[order(res_filtered$log2FoldChange, decreasing = TRUE),], n = 10)
+top_neg_log2fold = head(res_filtered[order(res_filtered$log2FoldChange, decreasing = FALSE),], n = 10)
+top_10_log2fold = top_pos_log2fold
+
+n = m = 1
+for (i in 1:10) {
+    if ( (abs(top_pos_log2fold$log2FoldChange[n])) > abs(top_neg_log2fold$log2FoldChange[m])){
+      top_10_log2fold[i,] = top_pos_log2fold[n,]
+      rownames(top_10_log2fold)[i] <- rownames(top_pos_log2fold)[n] 
+      n = n + 1
+    }
+    else {
+      top_10_log2fold[i,] = top_neg_log2fold[m,]
+      rownames(top_10_log2fold)[i] <- rownames(top_neg_log2fold)[m]
+      m = m + 1
+    }
+}
+top_10_log2fold$stat = NULL
+top_10_log2fold$lfcSE = NULL
+
 
 # Significantly Differentially Expressed
-
 signif = which(res$padj<0.05)
 deg = res[signif,]
 
-
-
-# Separate them 
-dup = deg[deg[,2]>0.,]
-
-ddown = deg[deg[,2]<0.,]
 
 # For Pathway Enrichment we need Entrez IDs
 entrez_all = data_Rnaseq[keep[signif],2]
@@ -127,7 +141,9 @@ entrez_down = data_Rnaseq[keep[signif[deg[,2]<0.]],2]
 # Do a KEGG pathway over-representation analysis
 
 all_paths =   enrichKEGG(gene = entrez_all, organism = 'hsa', pvalueCutoff = 0.05)
-#head(all_paths)
+
+
+# PCA
 
 # Transform the data to visualize
 rld <- vst(dds, blind=FALSE)
@@ -135,34 +151,32 @@ rld <- vst(dds, blind=FALSE)
 # Do Principal Components Analysis
 pc = prcomp(assay(rld))
 
-# Plot 
-#plot(pc$rotation[,1], pc$rotation[,2], col = 1+(metadata), pch = 19)
-#plotPCA(rld, intgroup = "ERBB2")
 
 ```
-
 
 ## Background
 
 According to the International Agency for Resarch on Cancer, breast cancer is the most common cancer overall, accounting for about 12% of all cancer cases. In approx. 20% of invasive breast cancers the ERBB2 oncogene is overexpressed, which has also been linked to the promotion of breast cancer invasion and metastasis, resulting in poor patient survival (https://www.intechopen.com/chapters/53690).
 
+ERBB2 belongs to the ERBB family of genes that encode a member of the epidermal growth factor (EGF) receptor family of receptor tyrosine kinases (RTKs) [https://www.ncbi.nlm.nih.gov/gene/2064#summary]. 
+Although this protein has no ligand binding domain of its own and therefore cannot bind growth factors, it does bind with other EGF receptors and activates downstream signalling
+pathways such as MAPK and PI3K/Akt to the effect of promoting cell proliferation and suppressing apoptosis. 
+
 While the overexpression of ERBB2 has been established as a reliable biomarker for the diagnosis, treatment and prognosis of breast cancer, many of the underlying processes such as tumor progression and resistance to treatment are still not well understood. It is therefore important to understand the factors that contribute to therapy resistance of ErbB2-positive breast cancer tumors and to identify other genetic or transcriptomic factors in order to identify novel therapeutic strategies to overcome resistance.
 
-In this study I am going to investigate whether and what other genes are overexpressed in patients with ERBB2+ breast cancer. This could
-provide insights into other contributing factors that promote/supress tumor progression or enhance/inhibit therapy resistance, ultimately leading to a better understanging and the development of alternative therapy targets.
-
-
+In this study I am going to investigate whether and what other genes are overexpressed in patients with ERBB2+ breast cancer. This could provide insights into other contributing factors that promote/supress tumor progression or enhance/inhibit therapy resistance, ultimately leading to a better understanging and the development of alternative therapy targets.
 
 ## Methods
 
-For this investigation I performed a differential gene expression analysis of patients with BRCA, using the DESeq2 R-package from BiocManager. The patient data was obtained from ... and contains a dataset with about 1080 observations. For the analysis I divided the patients into two groups, one group with an amplified level of ERBB2 (CNA level > 0) and the other one with an expression level <= 0. 
-A KEGG Enrichment Analysis was subsequently performed using the clusterProfiler library from BiocManager. Lastly, I performed a Principal Component Analysis.
+For this investigation I performed a Differential Gene Expression analysis of patients with BRCA, using the DESeq2 R-package from BiocManager. The patient data was obtained from ... and contains a dataset with about 1080 observations. For the analysis I divided the patient's data into two groups, one group with an amplified level of ERBB2 (CNA level \> 0) and the other one with an expression level \<= 0. A KEGG Enrichment Analysis was subsequently performed using the clusterProfiler library from BiocManager. Lastly, I performed a Principal Component Analysis.
 
 ## Results
 
-
 ### Data preparation
 
+For data preparation I filtered the RNASeq dataset to only contain read counts of \>= 10.
+
+In order to assess the overall quality of the filtered data I evaluated the normalised counts for the two patient groups. For this I plotted the distribution of counts of the ERBB2 gene. For non-amplified ERBB2 patients we can observe a generally lower count compared to ERBB2 amplified patients, together with a smaller distribution.
 
 ```{r}
 #| echo: false
@@ -172,80 +186,97 @@ A KEGG Enrichment Analysis was subsequently performed using the clusterProfiler 
 library(ggplot2)
 library(knitr)
 
-counts = plotCounts(dds, which.min(res$pvalue), "ERBB2", returnData=TRUE)
+erbb2_row_index = which(rownames(res) =="ERBB2")
+counts = plotCounts(dds, erbb2_row_index, "ERBB2", returnData=TRUE)
 
-# counts_0 = data.frame(cnt = counts$count[counts$ERBB2 == 0])
-# counts_1 = data.frame(cnt = counts$count[counts$ERBB2 == 1])
-# 
-mean0 = mean(counts$count[counts$ERBB2 == 0])
-mean1 = mean(counts$count[counts$ERBB2 == 1])
-count_means = data.frame(mean= c(mean0, mean1), ERBB2 = c(0,1))
-# ggplot() +
-#   geom_freqpoly(mapping = aes(x = cnt) , data = counts_0, binwidth = 100) +
-#   geom_freqpoly(mapping = aes(x = cnt) , data = counts_1, binwidth = 100, color = "red") +
-#    xlim(0, 10000)
-# 
-# ggplot() +
-#   geom_dotplot(mapping = aes(x = cnt) , data = counts_0)
-# 
-ggplot(counts,  aes(x=as.factor(ERBB2), y = count)) +
-   geom_point() +
-   geom_point(
-    mapping = aes(y = mean), data = count_means,
-    colour = 'red', size = 3
-  ) + 
-  ylim(0,100000) +
+ggplot(counts, aes(x=ERBB2, y=count)) + 
+  geom_point(position=position_jitter(w=0.1,h=0)) + 
+  scale_y_log10(breaks=c(25,100,400)) +
+  xlim(-0.5,1.5) +
   xlab("ERBB2 amplified")
 
 
 ```
 
-Table @tab-top10-results shows the result of the DGE analysis by listing the
-top 10 genes with the highest deviation of the log2 fold change value.
+### Top 10 Differentially Expressed Genes Ranked by Fold Change
 
+The aim of differential expression analysis is to discover significant changes in expression levels of genes. The difference in expression levels from a control group can then function as an indicator of a common underlying factor in the development of a disease. It also serves as a pre-requisite for performing a Pathway Enrichment Analysis. In this section I obtained the top 10 genes that were differentially expressed based on the observed log2 fold change. Since the log2 fold change can be positive (increased expression) or negative (decreased expression), I retrieved the genes with the top absolute value of the log2 fold change and ordered them accordingly. The result is summarised in @tab-top10-results.
 
-``` {r}
+```{r}
 #| echo: false
 #| warning: false
 #| message: false
 #| label: tab-top10-results
-#| tab-cap: Top 10 differentiated genes
+#| tab-cap: Top 10 differentially expressed genes
 
-kable(head(res[order(res$log2FoldChange),], n = 10),
-           caption = "Top 10 differentiated genes")
+kable(top_10_log2fold[order(top_10_log2fold$log2FoldChange),])
+
 ```
 
 
-``` {r}
+### Pathway Enrichment Analysis
+
+The DGE analysis performed before allows to subsequently identify more specific groups or categories of genes that together play a role in signalling pathways and intra-cellular processes. @tab-top5-paths shows the result of the pathway enrichment analysis ordered by ascending p-value. From this table we can see that the first 2 pathways, P13K-Akt and JAK-STAT belong to the signal transduction subcategory. The P13K pathway is one of the most important intracellular pathways, which regulates cell growth, survival, metabolism, and angiogenesis. It is also believed to be deregulated in a wide spectrum of human cancers. (https://molecular-cancer.biomedcentral.com/articles/10.1186/s12943-019-0954-x) The JAK-STAT pathway on the other hand plays an important role in the regulation of the immune system (https://biosignaling.biomedcentral.com/articles/10.1186/s12964-017-0177-y).
+
+```{r}
 #| echo: false
 #| warning: false
 #| message: false
 #| label: tab-top5-paths
 #| tab-cap: Top 5 paths
 
-kegg_top5 = head(all_paths, n = 5)
+kegg_top5 = head(all_paths[order(all_paths$p.adjust)], n = 5)
 kegg_top5$geneID = NULL
 kegg_top5$BgRatio = NULL
+kegg_top5$pvalue = NULL
+kegg_top5$GeneRatio = NULL
 kegg_top5$ID = NULL
 kegg_top5$qvalue = NULL
 
-kable(head(kegg_top5, n = 10),
-           caption = "Top 10 paths")
+kable(kegg_top5, caption = "Top 5 paths")
+
+#![Caption](hsa04151_20231206_161905.png)
 ```
+
+
 
 ### PCA
 
-``` {r}
+The purpose of conducting a PCA is to reduce the number of dimensions in the
+data, which facilitates the recognition of patterns and the visualisation of
+the data. For this I first transformed the data using the Variance stabilizing transformation
+and then obtained the PCA via the prcomp() function.
+```{r}
 #| echo: false
 #| warning: false
 #| message: false
-
+#| label: fig-pca
+#| fog-cap: PCA analysis
 
 plotPCA(rld, intgroup = "ERBB2")
-#plot(pc$rotation[,2], pc$rotation[,1], col = 1+(metadata), pch = 19)
 
 ```
+The PCA plot is shown in fig-pca. In our case the PCA has not resulted in a clear clustering
+of data.
 
+### Discussion
+
+This study investigated ... in patients with BRCA that exhibited an amplified
+expression of the ERBB2 oncogene. For this I performed a Differential Gene 
+Expression analysis followed by a Pathway Enrichment analysis.
+
+The result obtained from the DGE analysis are difficult to interpret. What
+I found confusing is the fact that some of the genes (SPANXC and SPANXA2) are
+overexpressed but belong to a family of genes that are only present in the male
+reproductive organs (testis). Since the data set comprised of mainly female patients
+I would not have expected a male-specific gene to be significantly overexpressed.
+In the literature I could also not find any links between the other genes in that result set and breast cancer.
+
+The PEA on the other hand exhibited the more interesting result, indicating a significant deregulation of 2 major pathways, P13K-Akt and JAK-STAT, which both play a role in cell growth, survival, and the immune system. Given the aggressive nature of BRCA in patients with amplified ERBB2 gene expression, it is therefore plausible that these affected pathways contribute to the overall promotion of breast cancer invasion and metastasis.
+
+### References
+
+TO BE DONE
 
 
 
