@@ -13,19 +13,19 @@ editor: visual
 if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 
-# Install DeSeq2
+# Install the required packages
 
-#BiocManager::install("DESeq2")
-#BiocManager::install("clusterProfiler")
+BiocManager::install("DESeq2")
+BiocManager::install("clusterProfiler")
 
 library(clusterProfiler)
 library(DESeq2)
-library(vidger)
+library(enrichplot)
 
 current_wd = getwd()
 filename_dataset = paste(current_wd, "brca_tcga_pan_can_atlas_2018.tar.gz", sep = "/")
 
-#untar(filename_dataset)
+untar(filename_dataset)
 setwd("brca_tcga_pan_can_atlas_2018")
 
 # Read the RNASeq file: data_mrna_seq_v2_rsem.txt
@@ -33,7 +33,6 @@ data_Rnaseq = read.delim("data_mrna_seq_v2_rsem.txt")
 
 
 # Read the Patient Data file: data_clinical_patient.txt
-
 data_patient = read.delim("data_clinical_patient.txt")
 
 # Read the Copy Number Aberrations Data: data_cna.txt
@@ -138,8 +137,8 @@ deg = res[signif,]
 entrez_all = data_Rnaseq[keep[signif],2]
 entrez_up = data_Rnaseq[keep[signif[deg[,2]>0.]],2]
 entrez_down = data_Rnaseq[keep[signif[deg[,2]<0.]],2]
-# Do a KEGG pathway over-representation analysis
 
+# Do a KEGG pathway over-representation analysis
 all_paths =   enrichKEGG(gene = entrez_all, organism = 'hsa', pvalueCutoff = 0.05)
 
 
