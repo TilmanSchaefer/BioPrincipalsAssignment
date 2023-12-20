@@ -193,7 +193,6 @@ counts = plotCounts(dds, erbb2_row_index, "ERBB2", returnData=TRUE)
 ggplot(counts, aes(x=ERBB2, y=count, color=count)) + 
   geom_point(position=position_jitter(w=0.1,h=0), show.legend =TRUE) + 
   scale_y_log10(breaks=c(25,100,400,1600, 6400, 25600, 102400)) +
-  #xlim(-0.5,1.5) +
   scale_x_continuous(breaks = c(0, 1),
     labels = c('not amplified', 'amplified'), expand = expansion(add = 0.5)) +
   xlab("ERBB2 amplification") 
@@ -213,6 +212,7 @@ The aim of differential expression analysis is to discover significant changes i
 #| label: tbl-top10-results
 #| tbl-cap: Top 10 differentially expressed genes
 
+# create table with top 10 differentially expressed genes 
 top10_ordered <- top_10_log2fold[order(top_10_log2fold$log2FoldChange),]
 top10_df <- data.frame(
   rownames(top_10_log2fold), 
@@ -237,6 +237,7 @@ The DGE analysis performed before allows to subsequently identify more specific 
 #| label: fig-pea
 #| fig-cap: Pathway Enrichment Analysis
 
+# get list of top 5 enriched pathways
 kegg_top5 = head(all_paths[order(all_paths$p.adjust)], n = 5)
 kegg_top5$geneID = NULL
 kegg_top5$BgRatio = NULL
